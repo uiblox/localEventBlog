@@ -13,7 +13,12 @@ export type BlogEvent = {
 export type Photo = { id: number; filename: string; thumb: string };
 
 // better-sqlite3 is synchronous, so connection() keeps queries out of prerendering.
-export async function listEvents(tag?: string): Promise<BlogEvent[]> {
+// Escape LIKE wildcards so "100%" or "a_b" are searched literally.
+function likePattern(q: string) {
+  return `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+export async function listEvents(opts: { tag?: string; q?: string } = {}): Promise<BlogEvent[]> {
   await connection();
   const rows = db
     .prepare(
@@ -22,12 +27,18 @@ export async function listEvents(tag?: string): Promise<BlogEvent[]> {
               (SELECT group_concat(t.name, ',') FROM event_tags et
                  JOIN tags t ON t.id = et.tag_id WHERE et.event_id = e.id) AS tag_list
        FROM events e
-       WHERE @tag IS NULL OR EXISTS (
+       WHERE (@tag IS NULL OR EXISTS (
          SELECT 1 FROM event_tags et JOIN tags t ON t.id = et.tag_id
-         WHERE et.event_id = e.id AND t.name = @tag)
+         WHERE et.event_id = e.id AND t.name = @tag))
+       AND (@q IS NULL
+         OR e.title LIKE @q ESCAPE '\\'
+         OR e.body LIKE @q ESCAPE '\\'
+         OR EXISTS (
+           SELECT 1 FROM event_tags et JOIN tags t ON t.id = et.tag_id
+           WHERE et.event_id = e.id AND t.name LIKE @q ESCAPE '\\'))
        ORDER BY e.event_date DESC, e.id DESC`,
     )
-    .all({ tag: tag ?? null }) as (Omit<BlogEvent, "tags"> & { tag_list: string | null })[];
+    .all({ tag: opts.tag ?? null, q: opts.q ? likePattern(opts.q) : null }) as (Omit<BlogEvent, "tags"> & { tag_list: string | null })[];
   return rows.map(({ tag_list, ...e }) => ({
     ...e,
     tags: tag_list ? tag_list.split(",").sort() : [],

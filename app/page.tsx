@@ -2,23 +2,30 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { listEvents, listTags } from "@/lib/events";
 
-async function TagFilter({ active }: { active?: string }) {
+async function TagFilter({ active, q }: { active?: string; q?: string }) {
   const tags = await listTags();
   if (tags.length === 0) return null;
   const chip = "rounded-full px-3 py-1 text-sm";
   const idle = "bg-zinc-100 dark:bg-zinc-800";
   const on = "bg-foreground text-background";
+  const href = (tag?: string) => {
+    const params = new URLSearchParams();
+    if (tag) params.set("tag", tag);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return qs ? `/?${qs}` : "/";
+  };
   return (
     <ul className="mb-6 flex flex-wrap gap-2">
       <li>
-        <Link href="/" className={`${chip} ${active ? idle : on}`}>
+        <Link href={href()} className={`${chip} ${active ? idle : on}`}>
           all
         </Link>
       </li>
       {tags.map((t) => (
         <li key={t.name}>
           <Link
-            href={`/?tag=${encodeURIComponent(t.name)}`}
+            href={href(t.name)}
             className={`${chip} ${active === t.name ? on : idle}`}
           >
             {t.name} <span className="opacity-60">{t.count}</span>
@@ -29,12 +36,14 @@ async function TagFilter({ active }: { active?: string }) {
   );
 }
 
-async function EventList({ tag }: { tag?: string }) {
-  const events = await listEvents(tag);
+async function EventList({ tag, q }: { tag?: string; q?: string }) {
+  const events = await listEvents({ tag, q });
   if (events.length === 0) {
-    return tag ? (
+    return tag || q ? (
       <p className="text-zinc-500">
-        No events tagged “{tag}”. <Link href="/" className="underline">Show all</Link>.
+        No events found
+        {q ? <> matching “{q}”</> : null}
+        {tag ? <> tagged “{tag}”</> : null}. <Link href="/" className="underline">Show all</Link>.
       </p>
     ) : (
       <p className="text-zinc-500">
@@ -79,13 +88,43 @@ async function EventList({ tag }: { tag?: string }) {
   );
 }
 
-async function Content({ searchParams }: { searchParams: Promise<{ tag?: string | string[] }> }) {
-  const { tag } = await searchParams;
-  const active = typeof tag === "string" && tag ? tag : undefined;
+function SearchBox({ q, tag }: { q?: string; tag?: string }) {
+  return (
+    <form action="/" className="mb-6 flex gap-2">
+      {tag && <input type="hidden" name="tag" value={tag} />}
+      <input
+        type="search"
+        name="q"
+        defaultValue={q}
+        placeholder="Search titles, notes and tags…"
+        className="min-w-0 flex-1 rounded-md border border-black/20 bg-transparent px-3 py-2 dark:border-white/25"
+      />
+      <button className="rounded-md bg-foreground px-4 py-2 text-background">Search</button>
+      {q && (
+        <Link
+          href={tag ? `/?tag=${encodeURIComponent(tag)}` : "/"}
+          className="self-center text-sm underline"
+        >
+          Clear
+        </Link>
+      )}
+    </form>
+  );
+}
+
+async function Content({
+  searchParams,
+}: {
+  searchParams: Promise<{ tag?: string | string[]; q?: string | string[] }>;
+}) {
+  const { tag, q } = await searchParams;
+  const activeTag = typeof tag === "string" && tag ? tag : undefined;
+  const query = typeof q === "string" && q.trim() ? q.trim() : undefined;
   return (
     <>
-      <TagFilter active={active} />
-      <EventList tag={active} />
+      <SearchBox q={query} tag={activeTag} />
+      <TagFilter active={activeTag} q={query} />
+      <EventList tag={activeTag} q={query} />
     </>
   );
 }
