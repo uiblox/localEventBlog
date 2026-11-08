@@ -31,6 +31,10 @@ export default function NewEventPage() {
         <textarea name="body" rows={10} className={input} />
       </label>
       <label className="block space-y-1">
+        <span className="text-sm">Tags (comma separated)</span>
+        <input name="tags" placeholder="family, trip, birthday" className={input} />
+      </label>
+      <label className="block space-y-1">
         <span className="text-sm">Photos</span>
         <input name="photos" type="file" accept="image/*" multiple className={input} />
       </label>

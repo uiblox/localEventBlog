@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
 import db, { UPLOAD_DIR } from "./db";
+import { parseTags, setEventTags } from "./tags";
 
 async function savePhoto(file: File) {
   const id = randomUUID();
@@ -50,9 +51,18 @@ export async function createEvent(formData: FormData) {
     .prepare("INSERT INTO events (title, event_date, body) VALUES (?, ?, ?)")
     .run(title, date, body);
   const id = Number(lastInsertRowid);
+  setEventTags(id, parseTags(String(formData.get("tags") ?? "")));
   await addPhotos(id, formData.getAll("photos"));
   revalidatePath("/");
   redirect(`/events/${id}`);
+}
+
+export async function updateTags(formData: FormData) {
+  const id = Number(formData.get("event_id"));
+  if (!Number.isInteger(id)) throw new Error("Invalid event.");
+  setEventTags(id, parseTags(String(formData.get("tags") ?? "")));
+  revalidatePath(`/events/${id}`);
+  revalidatePath("/");
 }
 
 export async function addPhotosToEvent(formData: FormData) {
@@ -70,6 +80,7 @@ export async function deleteEvent(formData: FormData) {
     .prepare("SELECT filename, thumb FROM photos WHERE event_id = ?")
     .all(id) as { filename: string; thumb: string }[];
   db.prepare("DELETE FROM events WHERE id = ?").run(id);
+  db.prepare("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM event_tags)").run();
   await Promise.all(
     photos.flatMap((p) => [
       fs.rm(path.join(UPLOAD_DIR, p.filename), { force: true }),

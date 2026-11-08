@@ -1,11 +1,42 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { listEvents } from "@/lib/events";
+import { listEvents, listTags } from "@/lib/events";
 
-async function EventList() {
-  const events = await listEvents();
+async function TagFilter({ active }: { active?: string }) {
+  const tags = await listTags();
+  if (tags.length === 0) return null;
+  const chip = "rounded-full px-3 py-1 text-sm";
+  const idle = "bg-zinc-100 dark:bg-zinc-800";
+  const on = "bg-foreground text-background";
+  return (
+    <ul className="mb-6 flex flex-wrap gap-2">
+      <li>
+        <Link href="/" className={`${chip} ${active ? idle : on}`}>
+          all
+        </Link>
+      </li>
+      {tags.map((t) => (
+        <li key={t.name}>
+          <Link
+            href={`/?tag=${encodeURIComponent(t.name)}`}
+            className={`${chip} ${active === t.name ? on : idle}`}
+          >
+            {t.name} <span className="opacity-60">{t.count}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+async function EventList({ tag }: { tag?: string }) {
+  const events = await listEvents(tag);
   if (events.length === 0) {
-    return (
+    return tag ? (
+      <p className="text-zinc-500">
+        No events tagged “{tag}”. <Link href="/" className="underline">Show all</Link>.
+      </p>
+    ) : (
       <p className="text-zinc-500">
         No events yet. <Link href="/events/new" className="underline">Add your first one</Link>.
       </p>
@@ -35,6 +66,11 @@ async function EventList() {
               <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
                 {e.body.replace(/[#*_`>\-]/g, "")}
               </p>
+              {e.tags.length > 0 && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  {e.tags.map((t) => `#${t}`).join(" ")}
+                </p>
+              )}
             </div>
           </Link>
         </li>
@@ -43,10 +79,21 @@ async function EventList() {
   );
 }
 
-export default function Home() {
+async function Content({ searchParams }: { searchParams: Promise<{ tag?: string | string[] }> }) {
+  const { tag } = await searchParams;
+  const active = typeof tag === "string" && tag ? tag : undefined;
+  return (
+    <>
+      <TagFilter active={active} />
+      <EventList tag={active} />
+    </>
+  );
+}
+
+export default function Home({ searchParams }: PageProps<"/">) {
   return (
     <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
-      <EventList />
+      <Content searchParams={searchParams} />
     </Suspense>
   );
 }
